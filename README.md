@@ -23,14 +23,24 @@ The project is implemented as a standalone Intelligent Contract with the followi
 
 ---
 
-## ⚖️ The Validator's Role & Strict Binding
+## ⚖️ The Validator's Role, Bound Thresholds & Deterministic Normalization
 
 In GenLayer, non-deterministic operations (like AI execution and web scraping) require a leader-validator consensus model. 
 
-In our contract, the **Validator strictly binds the payout-affecting fields (`outcome` and `confidence`).** 
-**Why?** Because these fields directly dictate the financial payout logic. If the true confidence score drops below 60, the market outcome is forced to `INVALID` and all players receive a full refund. 
+In our contract, the **Validator strictly binds both payout-affecting fields (`outcome` and `confidence threshold bucket`).**
 
-To prevent consensus from hanging due to minor LLM fluctuations (e.g., Leader scores 85, Validator scores 90), the validator uses **Threshold Matching**: `(mine["confidence"] >= 60) == (leader["confidence"] >= 60)`. This guarantees that funds are only distributed when the network reaches true consensus on the real-world outcome and its validity threshold, satisfying strict GenVM requirements.
+### 1. Bound Confidence Threshold in Validation
+- **Outcome Matching**: `leader_outcome == mine_outcome`.
+- **Threshold Bucket Matching**: `(leader_confidence >= 60) == (validator_confidence >= 60)`.
+- **Strict Validation Constraint**: If a leader proposes a payout outcome (`YES` or `NO`), its confidence **MUST be >= 60**. If `confidence < 60` for a `YES`/`NO` proposal, the validator explicitly rejects the leader's submission (`return False`).
+
+### 2. Deterministic Post-Consensus Normalization
+After consensus is reached via `gl.vm.run_nondet`, the smart contract executes a deterministic post-consensus check:
+```python
+if confidence_int < 60:
+    outcome = "INVALID"
+```
+This guarantees that regardless of LLM variations, any outcome stored with confidence below 60 is strictly normalized to `INVALID`, triggering a full 100% refund for all players and preventing any unauthorized payout.
 
 ---
 

@@ -142,7 +142,7 @@ class Contract(gl.Contract):
 
         m = self.markets[market_id]
         
-        # Enforce market deadline strictly and securely via node-context time
+        # Enforce market deadline strictly via node-context time
         current_timestamp = bigint(int(datetime.now(timezone.utc).timestamp()))
         if current_timestamp >= m.deadline:
             raise UserError("Market has expired")
@@ -189,7 +189,7 @@ class Contract(gl.Contract):
 
         m = self.markets[market_id]
         
-        # Strict resolution constraint: Cannot resolve before deadline
+        # Cannot resolve before deadline
         current_timestamp = bigint(int(datetime.now(timezone.utc).timestamp()))
         if current_timestamp < m.deadline:
             raise UserError("Market deadline has not passed yet")
@@ -242,11 +242,11 @@ OUTPUT ONLY JSON:
                     text = raw.content if hasattr(raw, "content") else str(raw)
                     parsed = self._parse_llm_json(text)
 
-                # Bind confidence directly to outcome to prevent validator discrepancies
                 conf = int(parsed.get("confidence", 0))
                 outcome = str(parsed.get("outcome", "INVALID")).upper()
                 reason = str(parsed.get("reason", ""))
 
+                # Internal normalization: if confidence < 60, force outcome to INVALID
                 if conf < 60 and outcome != "INVALID":
                     outcome = "INVALID"
                     reason = f"[low_confidence: {conf}%] " + reason
@@ -268,8 +268,25 @@ OUTPUT ONLY JSON:
 
             mine_data = leader_fn()
             
-            # Semantic agreement on verified outcome
-            return str(leader_data.get("outcome", "")).upper() == str(mine_data.get("outcome", "")).upper()
+            leader_outcome = str(leader_data.get("outcome", "INVALID")).upper()
+            mine_outcome = str(mine_data.get("outcome", "INVALID")).upper()
+            
+            leader_conf = int(leader_data.get("confidence", 0))
+            mine_conf = int(mine_data.get("confidence", 0))
+
+            # 1. Outcomes must match
+            if leader_outcome != mine_outcome:
+                return False
+
+            # 2. Confidence threshold bucket must match (both >= 60 or both < 60)
+            if (leader_conf >= 60) != (mine_conf >= 60):
+                return False
+
+            # 3. Validation rule: A non-INVALID outcome (YES/NO) MUST have confidence >= 60
+            if leader_outcome in ("YES", "NO") and leader_conf < 60:
+                return False
+
+            return True
 
         result = gl.vm.run_nondet(leader_fn, validator_fn)
         if not isinstance(result, dict):
@@ -279,7 +296,18 @@ OUTPUT ONLY JSON:
         if outcome not in ("YES", "NO", "INVALID"):
             outcome = "INVALID"
 
-        confidence = bigint(int(result.get("confidence", 0)))
+        confidence_int = int(result.get("confidence", 0))
+        if confidence_int < 0:
+            confidence_int = 0
+        if confidence_int > 100:
+            confidence_int = 100
+
+        # Post-consensus deterministic normalization:
+        # Guarantee that any result stored with confidence < 60 MUST have outcome INVALID
+        if confidence_int < 60:
+            outcome = "INVALID"
+
+        confidence = bigint(confidence_int)
         reason = str(result.get("reason", "Resolved by AI consensus"))
 
         m.outcome = outcome
