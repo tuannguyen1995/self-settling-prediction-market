@@ -46,7 +46,7 @@ This guarantees that regardless of LLM variations, any outcome stored with confi
 
 ## 🚀 Deployment (StudioNet)
 
-- **Contract Address**: `0xdec93Fa3DD89fF80540E6641343D48A5Ff281D58`
+- **Contract Address**: `0xff1FA6A5b74bb8d4156F25FFDaC332103AB2a992`
 - **Network**: `studionet`
 
 ### 🔮 Worked Example (Illustrative call to resolve)
